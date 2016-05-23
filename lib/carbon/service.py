@@ -117,7 +117,6 @@ def createCacheService(config):
 def createAggregatorService(config):
   from carbon.conf import settings
 
-  settings.RELAY_METHOD = 'consistent-hashing'
   root_service = createBaseService(config, settings)
   setupPipeline(['rewrite:pre', 'aggregate', 'rewrite:post', 'relay'], root_service, settings)
   setupReceivers(root_service, settings)
