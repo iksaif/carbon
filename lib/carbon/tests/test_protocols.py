@@ -9,7 +9,7 @@ import pickle
 
 class TestMetricReceiversHandler(TestCase):
   def test_build(self):
-    plugins = ['line', 'udp', 'pickle', 'manhole', 'amqp']
+    plugins = ['line', 'udp', 'pickle', 'manhole', 'amqp', 'protobuf']
     self.assertEquals(MetricReceiver.plugins.keys(), plugins)
 
     class _FakeService(object):

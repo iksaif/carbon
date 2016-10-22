@@ -1,0 +1,16 @@
+syntax = "proto2";
+package carbon;
+
+message Point {
+  required uint32 timestamp = 2;
+  required double value = 3;
+}
+
+message Metric {
+  required string metric = 1;
+  repeated Point points = 2;
+}
+
+message Payload {
+  repeated Metric metrics = 1;
+}
