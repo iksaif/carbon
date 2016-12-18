@@ -1,9 +1,24 @@
+from carbon.protocols import MetricReceiver
 from unittest import TestCase
 from mock import Mock, patch
 from carbon.cache import _MetricCache
 
 import os.path
 import pickle
+
+
+class TestMetricReceiversHandler(TestCase):
+  def test_build(self):
+    plugins = ['line', 'udp', 'pickle', 'manhole', 'amqp']
+    self.assertEquals(MetricReceiver.plugins.keys(), plugins)
+
+    class _FakeService(object):
+      def addService(_, __):
+        pass
+    fake_service = _FakeService()
+
+    for plugin_name, plugin_class in MetricReceiver.plugins.items():
+      plugin_class.build(fake_service)
 
 
 class TestCacheManagementHandler(TestCase):
