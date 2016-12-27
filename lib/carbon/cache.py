@@ -119,9 +119,14 @@ class TimeSortedStrategy(DrainStrategy):
       while True:
         t = time.time()
         metric_lw = sorted(self.cache.watermarks, key=lambda x: x[1], reverse=True)
+        if settings.MIN_TIMESTAMP_LAG:
+          metric_lw = filter(lambda x: t - x[1] > settings.MIN_TIMESTAMP_LAG, metric_lw)
         size = len(metric_lw)
         if settings.LOG_CACHE_QUEUE_SORTS and size:
           log.msg("Sorted %d cache queues in %.6f seconds" % (size, time.time() - t))
+        if not metric_lw:
+          # If there is nothing to do give a chance to sleep to the reader.
+          yield None
         while metric_lw:
           yield itemgetter(0)(metric_lw.pop())
         if settings.LOG_CACHE_QUEUE_SORTS and size:
@@ -175,6 +180,8 @@ class _MetricCache(defaultdict):
     else:
       # Avoid .keys() as it dumps the whole list
       metric = self.iterkeys().next()
+    if metric is None:
+      return (None, [])
     return (metric, self.pop(metric))
 
   def get_datapoints(self, metric):
