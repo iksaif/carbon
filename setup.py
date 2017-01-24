@@ -68,7 +68,7 @@ install_files += init_scripts
 try:
     setup(
       name='carbon',
-      version='0.10.0-rc1',
+      version='0.10.0-rc1-criteo1',
       url='http://graphiteapp.org/',
       author='Chris Davis',
       author_email='chrismd@gmail.com',
