@@ -15,6 +15,7 @@ except ImportError:
   import pickle
   USING_CPICKLE = False
 
+import socket
 from time import sleep, time
 from twisted.python.util import initgroups
 from twisted.scripts.twistd import runApp
@@ -26,6 +27,25 @@ def dropprivs(user):
   os.setregid(gid, gid)
   os.setreuid(uid, uid)
   return (uid, gid)
+
+
+def enableTcpKeepAlive(transport):
+  from carbon.conf import settings
+
+  if not settings.TCP_KEEPALIVE or not hasattr(transport, 'getHandle'):
+    return
+
+  fd = transport.getHandle()
+  if fd.type != socket.SOCK_STREAM:
+    return
+
+  transport.setTcpKeepAlive(1)
+  for attr in ['TCP_KEEPIDLE', 'TCP_KEEPINTVL', 'TCP_KEEPCNT']:
+    flag = getattr(socket, attr, None)
+    value = getattr(settings, attr, None)
+    if not flag or value is None:
+      continue
+    fd.setsockopt(socket.SOL_TCP, flag, value)
 
 
 def run_twistd_plugin(filename):
