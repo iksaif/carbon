@@ -1,11 +1,13 @@
-from collections import deque
+from collections import deque, defaultdict
 from time import time
 
 from twisted.application.service import Service
 from twisted.internet import reactor
+from twisted.internet.base import BlockingResolver
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.protocols.basic import LineOnlyReceiver, Int32StringReceiver
+
 from carbon.conf import settings
 from carbon.util import pickle
 from carbon import instrumentation, log, pipeline, state
@@ -17,6 +19,8 @@ try:
 except ImportError:
     log.debug("Couldn't import signal module")
 
+
+resolver = BlockingResolver()
 
 SEND_QUEUE_LOW_WATERMARK = settings.MAX_QUEUE_SIZE * settings.QUEUE_LOW_WATERMARK_PCT
 
@@ -181,6 +185,7 @@ class CarbonClientFactory(object, ReconnectingClientFactory):
     self.router = router
     self.destinationName = ('%s:%d:%s' % destination).replace('.', '_')
     self.host, self.port, self.carbon_instance = destination
+    self.resolved_host = self.host
     self.addr = (self.host, self.port)
     self.started = False
     # This factory maintains protocol state across reconnects
@@ -237,7 +242,19 @@ class CarbonClientFactory(object, ReconnectingClientFactory):
 
   def startConnecting(self):  # calling this startFactory yields recursion problems
     self.started = True
-    self.connector = reactor.connectTCP(self.host, self.port, self)
+
+    if settings['DESTINATION_POOL_REPLICAS']:
+      # If we decide to open multiple TCP connection to a replica, we probably
+      # want to try to also load-balance accross hosts.
+      d = resolver.getHostByName(self.host, timeout=1)
+
+      def _store_result(result):
+        log.clients("Resolved %s to %s" % (self.host, result))
+        self.resolved_host = result
+
+      d.addCallback(_store_result)
+      d.addErrback(log.err)
+    self.connector = reactor.connectTCP(self.resolved_host, self.port, self)
 
   def stopConnecting(self):
     self.started = False
@@ -464,6 +481,8 @@ class CarbonClientManager(Service):
   def __init__(self, router):
     self.router = router
     self.client_factories = {}  # { destination : CarbonClientFactory() }
+    # { destination[0:2]: set(CarbonClientFactory()) }
+    self.pooled_factories = defaultdict(set)
 
     # This fake factory will be used as a buffer when we did not manage
     # to connect to any destination.
@@ -509,6 +528,7 @@ class CarbonClientManager(Service):
 
     factory = self.createFactory(destination)
     self.client_factories[destination] = factory
+    self.pooled_factories[destination[0:2]].add(factory)
 
     connectAttempted = DeferredList(
         [factory.connectionMade, factory.connectFailed],
@@ -531,6 +551,7 @@ class CarbonClientManager(Service):
 
   def disconnectClient(self, destination):
     factory = self.client_factories.pop(destination)
+    self.pooled_factories[destination[0:2]].remove(factory)
     c = factory.connector
     if c and c.state == 'connecting' and not factory.hasQueuedDatapoints():
       c.stopConnecting()
@@ -551,13 +572,21 @@ class CarbonClientManager(Service):
       return [None]
     return destinations
 
+  def getFactories(self, metric):
+    destinations = self.getDestinations(metric)
+    if not settings['DESTINATION_POOL_REPLICAS']:
+      return [self.client_factories[d] for d in destinations]
+    else:
+      return set([min(self.pooled_factories[d[0:2]], key=lambda f: f.queueSize)
+                  for d in destinations])
+
   def sendDatapoint(self, metric, datapoint):
-    for destination in self.getDestinations(metric):
-      self.client_factories[destination].sendDatapoint(metric, datapoint)
+    for factory in self.getFactories(metric):
+      factory.sendDatapoint(metric, datapoint)
 
   def sendHighPriorityDatapoint(self, metric, datapoint):
-    for destination in self.getDestinations(metric):
-      self.client_factories[destination].sendHighPriorityDatapoint(metric, datapoint)
+    for factory in self.getFactories(metric):
+      factory.sendHighPriorityDatapoint(metric, datapoint)
 
   def __str__(self):
     return "<%s[%x]>" % (self.__class__.__name__, id(self))
