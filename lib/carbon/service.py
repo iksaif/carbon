@@ -40,6 +40,10 @@ try:
   import carbon.protobuf  # NOQA
 except ImportError:
   pass
+try:
+  import carbon.kafka  # NOQA
+except ImportError:
+  pass
 
 
 class CarbonRootService(MultiService):

@@ -39,7 +39,7 @@ class CarbonClientProtocol(object):
     log.clients("%s::connectionMade" % self)
     self.paused = False
     self.connected = True
-    self.transport.registerProducer(self, streaming=True)
+    #self.transport.registerProducer(self, streaming=True)
     # Define internal metric names
     self.lastResetTime = time()
     self.destination = self.factory.destination
@@ -49,7 +49,7 @@ class CarbonClientProtocol(object):
     self.batchesSent = 'destinations.%s.batchesSent' % self.destinationName
 
     self.slowConnectionReset = 'destinations.%s.slowConnectionReset' % self.destinationName
-    enableTcpKeepAlive(self.transport, settings.TCP_KEEPALIVE, settings)
+    #enableTcpKeepAlive(self.transport, settings.TCP_KEEPALIVE, settings)
 
     d = self.factory.connectionMade
     # Setup a new deferred before calling the callback to allow callbacks
